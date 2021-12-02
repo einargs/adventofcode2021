@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{self, BufRead, BufReader, Read};
 
 fn count_incs(nums: Vec<i32>) -> u32 {
     nums.windows(2).fold(
@@ -10,8 +10,8 @@ fn count_incs(nums: Vec<i32>) -> u32 {
 
 fn count_window_incs(nums: Vec<i32>) -> u32 {
     nums.windows(4).fold(0, |acc, slices| {
-        let a = slices[1] + slices[2] + slices[3];
-        let b = slices[0] + slices[1] + slices[2];
+        let a = slices[1..=3].iter().sum::<i32>();
+        let b = slices[0..=2].iter().sum::<i32>();
         if a > b {
             acc + 1
         } else {
@@ -54,7 +54,7 @@ fn test_part_1() {
 #[test]
 fn test_part_2() {
     assert_eq!(
-        count_incs(vec![199, 200, 208, 210, 200, 207, 240, 269, 260, 263]),
+        count_window_incs(vec![199, 200, 208, 210, 200, 207, 240, 269, 260, 263]),
         5
     );
 }
