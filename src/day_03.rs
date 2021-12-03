@@ -1,130 +1,134 @@
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 
-fn to_dec(inp: Vec<u32>) -> u32 {
-    inp.iter()
-        .rev()
-        .enumerate()
-        .map(|(i, val)| 2u32.pow(i as u32) * val)
-        .sum()
-}
+use std::cmp::{Ord, Ordering};
 
-fn count_bits(inp: Vec<String>) -> (Vec<u32>, Vec<u32>) {
-    let zero_counts: Vec<u32> = inp.iter().fold(vec![0; inp[0].len()], |counts, entry| {
-        counts
-            .iter()
-            .zip(entry.chars())
-            .map(|(a, b)| if b == '0' { a + 1 } else { *a })
-            .collect()
-    });
-    let one_counts: Vec<u32> = zero_counts.iter().map(|x| inp.len() as u32 - x).collect();
-    (zero_counts, one_counts)
-}
+fn parse(filename: &str) -> Result<(usize, Vec<u32>), io::Error> {
+    let f = File::open(filename)?;
 
-fn calc_gamma_epsilon_rates(zero_counts: Vec<u32>, one_counts: Vec<u32>) -> (Vec<u32>, Vec<u32>) {
-    let gamma_rate: Vec<u32> = zero_counts
-        .iter()
-        .zip(one_counts.iter())
-        .map(|(z, o)| if z > o { 0 } else { 1 })
+    let mut reader = BufReader::new(&f);
+    let mut iter = reader.by_ref().lines();
+    let firstStr = iter.next().unwrap()?;
+    let len = firstStr.len();
+    let firstNum = u32::from_str_radix(&firstStr, 2).unwrap();
+    let nums: Vec<u32> = std::iter::once(firstNum)
+        .chain(iter.map(|l| u32::from_str_radix(&l.unwrap(), 2).unwrap()))
         .collect();
-
-    let epsilon_rate: Vec<u32> = gamma_rate.iter().map(|x| 1 - x).collect();
-
-    (gamma_rate, epsilon_rate)
+    Ok((len, nums))
 }
 
-fn parse_diagnostics(inp: Vec<String>) -> u32 {
-    let (zero_counts, one_counts) = count_bits(inp);
-    let (gamma_rate, epsilon_rate) = calc_gamma_epsilon_rates(zero_counts, one_counts);
-
-    to_dec(gamma_rate) * to_dec(epsilon_rate)
+fn bit_at(num: u32, len: usize, idx: usize) -> bool {
+    ((num >> (len - idx - 1)) & 1) == 1
 }
 
-fn parse_life_support_rating(inp: Vec<String>) -> u32 {
-    let mut oxygen = inp.clone();
-    let mut carbon = inp.clone();
+fn cmp_1_to_0(nums: &[u32], len: usize, idx: usize) -> Ordering {
+    let indicator: i32 = nums.iter().fold(0, |count, v|
+        if bit_at(*v, len, idx) { count + 1 } else { count - 1}
+    );
+    indicator.cmp(&0)
+}
 
-    let mut i: usize = 0;
-    while oxygen.len() > 1 {
-        let (zero_counts, one_counts) = count_bits(oxygen.clone());
-        let (gamma_rate, _) = calc_gamma_epsilon_rates(zero_counts, one_counts);
-        oxygen = oxygen
-            .iter()
-            .filter(|x| x.get(i..i + 1).unwrap().parse::<u32>().unwrap() == gamma_rate[i])
-            .map(|x| x.to_owned())
-            .collect::<Vec<String>>();
-        i += 1;
+fn parse_diagnostics(len: usize, nums: Vec<u32>) -> u32 {
+    let mut gamma = 0;
+    let mut epsilon = 0;
+    for i in 0..len {
+        match cmp_1_to_0(&nums, len, i) {
+            Ordering::Greater => {
+                gamma = (gamma << 1) | 1;
+                epsilon = epsilon << 1;
+            }
+            Ordering::Less => {
+                epsilon = (epsilon << 1) | 1;
+                gamma = gamma << 1;
+            }
+            Ordering::Equal => panic!("at index {:?}", i),
+        }
     }
+    gamma * epsilon
+}
 
-    let oxygen: Vec<u32> = oxygen[0].chars().map(|x| x.to_digit(10).unwrap()).collect();
-
-    let mut i: usize = 0;
-    while carbon.len() > 1 {
-        let (zero_counts, one_counts) = count_bits(carbon.clone());
-        let (_, epsilon_rate) = calc_gamma_epsilon_rates(zero_counts, one_counts);
-        carbon = carbon
-            .iter()
-            .filter(|x| x.get(i..i + 1).unwrap().parse::<u32>().unwrap() == epsilon_rate[i])
-            .map(|x| x.to_owned())
-            .collect::<Vec<String>>();
-        i += 1;
+fn apply_bit_criteria<F>(len: usize, inp: Vec<u32>, crit: F) -> u32
+where
+    F: Fn(Ordering) -> bool,
+{
+    let mut nums = inp;
+    for i in 0..len {
+        let desiredBit = crit(cmp_1_to_0(&nums, len, i));
+        nums = nums
+            .into_iter()
+            .filter(|v| bit_at(*v, len, i) == desiredBit)
+            .collect();
+        if nums.len() == 1 {
+            return nums[0];
+        }
     }
+    panic!("Should never reach! Should be narrowed down to one.")
+}
 
-    let carbon: Vec<u32> = carbon[0].chars().map(|x| x.to_digit(10).unwrap()).collect();
-
-    to_dec(oxygen) * to_dec(carbon)
+fn parse_life_support_rating(len: usize, nums: Vec<u32>) -> u32 {
+    let oxygen = apply_bit_criteria(len, nums.clone(), |o| o != Ordering::Less);
+    let co2 = apply_bit_criteria(len, nums, |o| o == Ordering::Less);
+    oxygen * co2
 }
 
 pub fn part_1(filename: &str) -> Result<String, io::Error> {
-    let f = File::open(filename)?;
+    let (len, diagnostics) = parse(filename)?;
 
-    let diagnostics: Vec<String> = BufReader::new(&f)
-        .by_ref()
-        .lines()
-        .map(|l| l.unwrap().to_owned())
-        .collect();
-
-    Ok(parse_diagnostics(diagnostics).to_string())
+    Ok(parse_diagnostics(len, diagnostics).to_string())
 }
 pub fn part_2(filename: &str) -> Result<String, io::Error> {
-    let f = File::open(filename)?;
-    let diagnostics: Vec<String> = BufReader::new(&f)
-        .by_ref()
-        .lines()
-        .map(|l| l.unwrap().to_owned())
-        .collect();
+    let (len, diagnostics) = parse(filename)?;
 
-    Ok(parse_life_support_rating(diagnostics).to_string())
+    Ok(parse_life_support_rating(len, diagnostics).to_string())
 }
 
-#[test]
-fn test_part_1() {
-    assert_eq!(
-        parse_diagnostics(
-            vec![
-                "00100", "11110", "10110", "10111", "10101", "01111", "00111", "11100", "10000",
-                "11001", "00010", "01010",
-            ]
-            .into_iter()
-            .map(|x| x.to_owned())
-            .collect()
-        ),
-        198
-    );
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_part_2() {
-    assert_eq!(
-        parse_life_support_rating(
-            vec![
-                "00100", "11110", "10110", "10111", "10101", "01111", "00111", "11100", "10000",
-                "11001", "00010", "01010",
-            ]
-            .into_iter()
-            .map(|x| x.to_owned())
-            .collect()
-        ),
-        230
-    );
+    fn test_data() -> Vec<u32> {
+        vec![
+            0b00100,
+            0b11110,
+            0b10110,
+            0b10111,
+            0b10101,
+            0b01111,
+            0b00111,
+            0b11100,
+            0b10000,
+            0b11001,
+            0b00010,
+            0b01010,
+        ]
+    }
+
+    #[test]
+    fn test_bit_at() {
+        assert_eq!(bit_at(0b0100, 4, 0), false);
+        assert_eq!(bit_at(0b0100, 4, 1), true);
+        assert_eq!(bit_at(0b1011, 4, 1), false);
+    }
+
+    #[test]
+    fn test_cmp_1_to_0() {
+        let nums = test_data();
+        assert_eq!(cmp_1_to_0(&nums, 5, 0), Ordering::Greater);
+        assert_eq!(cmp_1_to_0(&nums, 5, 1), Ordering::Less);
+        
+        let nums2 = vec![ 30, 22, 23, 21, 31, 28, 16, 25 ];
+        assert_eq!(cmp_1_to_0(&nums2, 5, 1), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_part_1() {
+        let nums = test_data();
+        assert_eq!(parse_diagnostics(5, nums), 198);
+    }
+
+    #[test]
+    fn test_part_2() {
+        let nums = test_data();
+        assert_eq!(parse_life_support_rating(5, nums), 230);
+    }
 }
