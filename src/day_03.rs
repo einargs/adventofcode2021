@@ -8,10 +8,10 @@ fn parse(filename: &str) -> Result<(usize, Vec<u32>), io::Error> {
 
     let mut reader = BufReader::new(&f);
     let mut iter = reader.by_ref().lines();
-    let firstStr = iter.next().unwrap()?;
-    let len = firstStr.len();
-    let firstNum = u32::from_str_radix(&firstStr, 2).unwrap();
-    let nums: Vec<u32> = std::iter::once(firstNum)
+    let first_str = iter.next().unwrap()?;
+    let len = first_str.len();
+    let first_num = u32::from_str_radix(&first_str, 2).unwrap();
+    let nums: Vec<u32> = std::iter::once(first_num)
         .chain(iter.map(|l| u32::from_str_radix(&l.unwrap(), 2).unwrap()))
         .collect();
     Ok((len, nums))
@@ -53,10 +53,10 @@ where
 {
     let mut nums = inp;
     for i in 0..len {
-        let desiredBit = crit(cmp_1_to_0(&nums, len, i));
+        let desired_bit = crit(cmp_1_to_0(&nums, len, i));
         nums = nums
             .into_iter()
-            .filter(|v| bit_at(*v, len, i) == desiredBit)
+            .filter(|v| bit_at(*v, len, i) == desired_bit)
             .collect();
         if nums.len() == 1 {
             return nums[0];
